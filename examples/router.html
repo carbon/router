@@ -1,0 +1,63 @@
+<html>
+	<body>
+	<script src="../base/modern.js"></script>
+	<script src="router.js"></script>
+
+	<script>
+
+	/*
+	var p = new Carbon.Route('hi/{apples}/{oranges}');
+
+	console.log('route');
+	console.log(p.test('hi/ab/1234'), p.params('hi/ab/1234'));
+	console.log(p.test('byte/ab/asdf'), p.params('byte/ab/1234'));
+	*/
+
+	var router = new Carbon.Router();
+
+	router.route('/kits/master/router/router.html', function() {
+	  $('body').css('backgroundColor', 'purple');
+	});
+
+	router.route('/projects/{id}', function(cxt) {
+	 $('body').css('backgroundColor', 'red');
+	});
+
+	router.route('/blog', function(cxt) {
+	 $('body').css('backgroundColor', 'green');
+	});
+
+	router.route('/about', function(cxt) {
+	 $('body').css('backgroundColor', 'pink');
+	});
+
+	router.route('/contact', {
+		load: function(cxt) {
+	 	  $('body').css('backgroundColor', 'yellow');
+
+		},
+		unload: function(cxt) {
+			console.log('unload');
+
+			$('body').css('backgroundColor', 'green');
+
+			var promise = $.Deferred();
+
+			setTimeout(promise.resolve, 1000);
+
+			return promise;
+		}
+	});
+
+	router.start();
+
+	</script>
+
+
+	<p><a href="/projects/10">Project</a></p>
+	<p><a href="/about">About</a></p>
+	<p><a href="/contact">Contact</a></p>
+	<p><a href="/blog?page=2">Blog</a></p>
+	</body>
+
+</html>

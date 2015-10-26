@@ -1,0 +1,15 @@
+{
+  "name": "router",
+  "version": "1.0.0",
+  "main": "lib/router.js",
+  "author": "Jason Nelson",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carbon/router.git"
+  },
+  "bugs": {
+    "url": "https://github.com/carbon/router/issues"
+  },
+  "homepage": "https://github.com/carbon/router#readme"
+}
