@@ -1,42 +1,42 @@
 module Carbon {
-  class _Func {
-    handler: any;
-    context: any;
-    callback: any;
-
-    constructor(handler, context, callback) {
-      this.handler = handler;
-      this.context = context;
-      this.callback = callback;
+  class EventHandler {
+    constructor(public element: HTMLElement | Window, public type, public handler, public useCapture?: boolean) {
+      this.element.addEventListener(type, handler, useCapture);     
+    }
+      
+    stop() {
+      this.element.removeEventListener(this.type, this.handler, this.useCapture)
     }
   }
 
+  class _Func {
+    constructor(public handler, public context, public callback: Function) { }
+  }
+
   export class Router {
-    routes: Array<Route> = [ ];
-    callbacks: Array<_Func> = [ ];
+    routes: Route[] = [];
+    callbacks: _Func[] = [];
 
     executing = false;
 
     context: RouterContext = null;
 
+    popObserver: EventHandler;
+    clickObserver: EventHandler;
+    
     constructor(routes) {
       if (routes && typeof routes == 'object') {
         var keys = Object.keys(routes);
-
-        for(var i = 0; i < keys.length; i++) {
-          var key = keys[i];
-
+        
+        for(var key of keys) {
           this.route(key, routes[key]);
         }
       }
     }
 
-    start(options) {
-      this.psl = this._onpopstate.bind(this);
-      this.cl = this._onclick.bind(this);
-
-      window.addEventListener('popstate', this.psl, false);
-      window.addEventListener('click', this.cl, false);
+    start(options) {      
+      this.popObserver = new EventHandler(window, 'popstate', this._onpopstate.bind(this), false);
+      this.clickObserver =  new EventHandler(window, 'click', this._onclick.bind(this), true);
 
       var cxt = new RouterContext(
         /*url*/ location.pathname + location.search,
@@ -51,8 +51,8 @@ module Carbon {
     }
 
     stop() {
-      window.removeEventListener('popstate', this.psl, false);
-      window.removeEventListener('click', this.cl, false);
+      this.popObserver.stop();
+      this.clickObserver.stop();
     }
 
     route(path, handler) {
@@ -115,9 +115,7 @@ module Carbon {
     }
 
     _getRoute(cxt) {
-      for (var i = 0; i < this.routes.length; i++) {
-        var route = this.routes[i];
-
+      for (var route of this.routes) {
         if (route.test(cxt.path)) return route;
       }
 
@@ -219,7 +217,7 @@ module Carbon {
 
   export class Route {
     url: string;
-    paramNames: Array<string> = [ ];
+    paramNames: string[] = [ ];
     handler: Function;
     regexp: RegExp;
 
@@ -249,7 +247,7 @@ module Carbon {
     }
 
     params(path) {
-      var match = this.regexp.exec(path);
+      let match = this.regexp.exec(path);
 
       if (!match) return null;
 
