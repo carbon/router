@@ -16,43 +16,40 @@
 	var router = new Carbon.Router();
 
 	router.route('/kits/master/router/router.html', function() {
-	  $('body').css('backgroundColor', 'purple');
+	  document.body.style.backgroundColor = 'purple';
 	});
 
 	router.route('/projects/{id}', function(cxt) {
-	 $('body').css('backgroundColor', 'red');
+	 document.body.style.backgroundColor = 'red';
 	});
 
 	router.route('/blog', function(cxt) {
-	 $('body').css('backgroundColor', 'green');
+	 document.body.style.backgroundColor = 'green';
 	});
 
 	router.route('/about', function(cxt) {
-	 $('body').css('backgroundColor', 'pink');
+	   document.body.style.backgroundColor = 'pink';
 	});
 
 	router.route('/contact', {
 		load: function(cxt) {
-	 	  $('body').css('backgroundColor', 'yellow');
+	 	  document.body.style.backgroundColor = 'yellow';
 
 		},
 		unload: function(cxt) {
 			console.log('unload');
 
-			$('body').css('backgroundColor', 'green');
-
-			var promise = $.Deferred();
-
-			setTimeout(promise.resolve, 1000);
-
-			return promise;
+      document.body.style.backgroundColor = 'green';
+      
+      return new Promise((resolve, reject) => { 
+			 setTimeout(resolve, 1000);
+      }); 
 		}
 	});
 
 	router.start();
 
 	</script>
-
 
 	<p><a href="/projects/10">Project</a></p>
 	<p><a href="/about">About</a></p>

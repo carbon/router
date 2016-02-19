@@ -1,47 +1,44 @@
 module Carbon {
-  class EventHandler {
-    constructor(public element: HTMLElement | Window, public type, public handler, public useCapture?: boolean) {
-      this.element.addEventListener(type, handler, useCapture);     
-    }
-      
-    stop() {
-      this.element.removeEventListener(this.type, this.handler, this.useCapture)
-    }
-  }
-
-  class _Func {
-    constructor(public handler, public context, public callback: Function) { }
-  }
-
   export class Router {
+    static instance: Router;
+    
     routes: Route[] = [];
-    callbacks: _Func[] = [];
-
-    executing = false;
+    callbacks: RouteAction[] = [];
 
     context: RouterContext = null;
 
     popObserver: EventHandler;
     clickObserver: EventHandler;
+
+    beforeLoad: Function;
+    beforeNavigate: Function;
     
-    constructor(routes) {
-      if (routes && typeof routes == 'object') {
-        var keys = Object.keys(routes);
+    prevpath: string;
+    
+    executing = false;
         
-        for(var key of keys) {
+    constructor(routes: Route[]) {
+      if (routes && typeof routes == 'object') {
+        let keys = Object.keys(routes);
+
+        for (var key of keys) {
           this.route(key, routes[key]);
         }
       }
+      
+      Router.instance = this;
     }
 
-    start(options) {      
+    start(options) {
       this.popObserver = new EventHandler(window, 'popstate', this._onpopstate.bind(this), false);
       this.clickObserver =  new EventHandler(window, 'click', this._onclick.bind(this), true);
 
-      var cxt = new RouterContext(
+      let cxt = new RouterContext(
         /*url*/ location.pathname + location.search,
         /*state*/ null
       );
+      
+      cxt.hash = location.hash;
 
       cxt.init = true;
 
@@ -50,12 +47,16 @@ module Carbon {
       this._dispatch(cxt); // Initial dispatch
     }
 
+    on(type: string, listener: EventListener) {
+      document.addEventListener(type, listener, false);
+    }
+    
     stop() {
       this.popObserver.stop();
       this.clickObserver.stop();
     }
 
-    route(path, handler) {
+    route(path, handler: Function) {
       this.routes.push(new Route(path, handler));
     }
 
@@ -67,7 +68,11 @@ module Carbon {
       this._navigate(cxt);
     }
 
-    _navigate(cxt) {
+    _navigate(cxt: RouterContext) {
+      let result = trigger(document, 'router:navigate', cxt);
+      
+      if (result === false) return;
+      
       if (this.beforeNavigate) {
         this.beforeNavigate(cxt);
       }
@@ -88,13 +93,13 @@ module Carbon {
       this._dispatch(cxt);
     }
 
-    _dispatch(cxt) {
+    _dispatch(cxt: RouterContext) {
       if (this.context && this.context.route.unload) {
         var n = this.context;
 
         n.nextpath = cxt.path;
 
-        this._execute(new _Func(this.context.route.unload, n));
+        this._execute(new RouteAction('unload', this.context.route.unload, n));
       }
 
       if (!cxt.route) {
@@ -109,7 +114,7 @@ module Carbon {
         this.beforeLoad(cxt);
       }
 
-      this._execute(new _Func(cxt.route.handler, cxt));
+      this._execute(new RouteAction('load', cxt.route.load, cxt));
 
       this.context = cxt;
     }
@@ -122,11 +127,13 @@ module Carbon {
       return null;
     }
 
-    _execute(action: _Func) {
+    _execute(action: RouteAction) {
       this.callbacks.push(action);
 
       // execute immediatly if we can
-      if (!this.executing) this._fireNext();
+      if (!this.executing) { 
+        this._fireNext();
+      }
     }
 
     _fireNext() {
@@ -139,15 +146,21 @@ module Carbon {
       this.executing = true;
 
       // Pick the next action off the queue
-      var action = this.callbacks.shift();
+      let action = this.callbacks.shift();
 
-      var result = action.handler(action.context);
+      let result = action.handler(action.context);
 
       if (result && result.then) {
-        result.then(this._fireNext.bind(this));
+        result.then(() => {
+          trigger(document, 'route:' + action.type, action.context);;
+          
+          this._fireNext();
+        });
       }
-      else {
+      else { 
         this._fireNext();
+        
+        trigger(document, 'route:' + action.type, action.context);
       }
     }
 
@@ -157,16 +170,16 @@ module Carbon {
       this._dispatch(new RouterContext(e.state.url, e.state));
     }
 
-    _onclick(e) {
+    _onclick(e: MouseEvent) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
 
-      var el = <HTMLElement>e.target;
+      let el = <HTMLElement>e.target;
 
       while (el && el.nodeName !== 'A') el = <HTMLElement>el.parentNode;
 
       if (!el || el.nodeName !== 'A') return;
 
-      var href = el.getAttribute('href');
+      let href = el.getAttribute('href');
 
       if (!href) return;
 
@@ -191,16 +204,24 @@ module Carbon {
   export class RouterContext {
     url: string;
     path: string;
+    hash: string;
+    nextpath: string;
     pathname: string;
     state: any;
 
-    init = false;
     title = null;
-    replace = false;
-
+    
+    params: any;
+    
     route: Route;
 
-    constructor(url, state) {
+    clickEvent: MouseEvent;
+    target: HTMLElement;
+
+    init = false;
+    replace = false;
+        
+    constructor(url: string, state) {
       this.url = url;
       this.path = url.split('?')[0];
       this.pathname = this.path;
@@ -211,22 +232,31 @@ module Carbon {
     }
 
     save() {
-      history.replaceState(this.state, this.title, this.url);
+      history.replaceState(this.state, this.title, this.url + this.hash);
     }
   }
 
   export class Route {
     url: string;
     paramNames: string[] = [ ];
-    handler: Function;
+
     regexp: RegExp;
 
-    constructor(url: string, fn: Function) {
+    load: Function;
+    unload: Function;
+    
+    constructor(url: string, fn: Function | { load: Function, unload: Function }) {
       this.url = url;
 
-      this.handler = fn;
+      if (typeof fn === 'function') {
+        this.load = <Function>fn;
+      }
+      else {
+        this.load = fn.load.bind(fn);
+        this.unload = fn.unload.bind(fn);
+      }
 
-      var re = /{([^}]+)}/g;
+      const re = /{([^}]+)}/g;
 
       var re2 = url;
 
@@ -238,22 +268,17 @@ module Carbon {
         re2 = re2.replace(item[0], '\s*(.*)\s*');
       }
 
-      if (fn.load) {
-        this.handler = fn.load.bind(fn);
-        this.unload = fn.unload.bind(fn);
-      }
-
       this.regexp = new RegExp(re2 + '$', 'i');
     }
 
-    params(path) {
+    params(path: string) {
       let match = this.regexp.exec(path);
 
       if (!match) return null;
 
       var params = { };
 
-      for(var i = 1; i < match.length; i++) {
+      for (var i = 1; i < match.length; i++) {
         params[this.paramNames[i - 1]] = match[i];
       }
 
@@ -263,5 +288,26 @@ module Carbon {
     test(path) {
       return !!this.regexp.test(path);
     }
+  }
+  
+  function trigger(element: Element | Document, name: string, detail?) : boolean {
+    return element.dispatchEvent(new CustomEvent(name, {
+      bubbles: true,
+      detail: detail
+    }));
+  }
+  
+  class EventHandler {
+    constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
+      this.element.addEventListener(type, handler, useCapture);
+    }
+
+    stop() {
+      this.element.removeEventListener(this.type, this.handler, this.useCapture);
+    }
+  }
+
+  class RouteAction {
+    constructor(public type: string, public handler: Function, public context: RouterContext) { }
   }
 }
