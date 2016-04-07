@@ -1,7 +1,7 @@
 module Carbon {
   export class Router {
     static instance: Router;
-    
+
     routes: Route[] = [];
     callbacks: RouteAction[] = [];
 
@@ -12,11 +12,9 @@ module Carbon {
 
     beforeLoad: Function;
     beforeNavigate: Function;
-    
-    prevpath: string;
-    
+
     executing = false;
-        
+
     constructor(routes: Route[]) {
       if (routes && typeof routes == 'object') {
         let keys = Object.keys(routes);
@@ -25,7 +23,7 @@ module Carbon {
           this.route(key, routes[key]);
         }
       }
-      
+
       Router.instance = this;
     }
 
@@ -37,7 +35,7 @@ module Carbon {
         /*url*/ location.pathname + location.search,
         /*state*/ null
       );
-      
+
       cxt.hash = location.hash;
 
       cxt.init = true;
@@ -50,7 +48,7 @@ module Carbon {
     on(type: string, listener: EventListener) {
       document.addEventListener(type, listener, false);
     }
-    
+
     stop() {
       this.popObserver.stop();
       this.clickObserver.stop();
@@ -61,7 +59,7 @@ module Carbon {
     }
 
     navigate(url, options) {
-      var cxt = new RouterContext(url, null);
+      let cxt = new RouterContext(url, null);
 
       if (options && options.replace) cxt.replace = true;
 
@@ -70,17 +68,15 @@ module Carbon {
 
     _navigate(cxt: RouterContext) {
       let result = trigger(document, 'router:navigate', cxt);
-      
+
       if (result === false) return;
-      
+
       if (this.beforeNavigate) {
         this.beforeNavigate(cxt);
       }
 
       if (this.context) {
-        this.prevpath = this.context.path;
-
-        if (this.context.url == cxt.url) return; // same
+        if (this.context.url === cxt.url) return; // same
       }
 
       if (cxt.replace) {
@@ -94,12 +90,12 @@ module Carbon {
     }
 
     _dispatch(cxt: RouterContext) {
-      if (this.context && this.context.route.unload) {
-        var n = this.context;
+      let context = this.context; // current context (being replaced)
+            
+      if (context && context.route.unload) {  
+        context.nextpath = cxt.path;
 
-        n.nextpath = cxt.path;
-
-        this._execute(new RouteAction('unload', this.context.route.unload, n));
+        this._execute(new RouteAction('unload', context.route.unload, context));
       }
 
       if (!cxt.route) {
@@ -109,7 +105,11 @@ module Carbon {
       if (!cxt.route) return;
 
       cxt.params = cxt.route.params(cxt.path);
-
+      
+      if (context) {
+        cxt.prevpath = context.path;
+      }
+      
       if (this.beforeLoad) {
         this.beforeLoad(cxt);
       }
@@ -119,7 +119,7 @@ module Carbon {
       this.context = cxt;
     }
 
-    _getRoute(cxt) {
+    _getRoute(cxt: RouterContext) {
       for (var route of this.routes) {
         if (route.test(cxt.path)) return route;
       }
@@ -131,13 +131,13 @@ module Carbon {
       this.callbacks.push(action);
 
       // execute immediatly if we can
-      if (!this.executing) { 
+      if (!this.executing) {
         this._fireNext();
       }
     }
 
     _fireNext() {
-      if (this.callbacks.length == 0) {
+      if (this.callbacks.length === 0) {
         this.executing = false;
 
         return;
@@ -153,13 +153,13 @@ module Carbon {
       if (result && result.then) {
         result.then(() => {
           trigger(document, 'route:' + action.type, action.context);;
-          
+
           this._fireNext();
         });
       }
-      else { 
+      else {
         this._fireNext();
-        
+
         trigger(document, 'route:' + action.type, action.context);
       }
     }
@@ -185,7 +185,7 @@ module Carbon {
 
       if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) return;
 
-      var cxt = new RouterContext(href, null);
+      let cxt = new RouterContext(href, null);
 
       // Ensure it matches a route
       cxt.route = this._getRoute(cxt);
@@ -205,14 +205,15 @@ module Carbon {
     url: string;
     path: string;
     hash: string;
+    prevpath: string;
     nextpath: string;
     pathname: string;
     state: any;
 
     title = null;
-    
+
     params: any;
-    
+
     route: Route;
 
     clickEvent: MouseEvent;
@@ -220,7 +221,7 @@ module Carbon {
 
     init = false;
     replace = false;
-        
+
     constructor(url: string, state) {
       this.url = url;
       this.path = url.split('?')[0];
@@ -244,7 +245,7 @@ module Carbon {
 
     load: Function;
     unload: Function;
-    
+
     constructor(url: string, fn: Function | { load: Function, unload: Function }) {
       this.url = url;
 
@@ -276,7 +277,7 @@ module Carbon {
 
       if (!match) return null;
 
-      var params = { };
+      let params = { };
 
       for (var i = 1; i < match.length; i++) {
         params[this.paramNames[i - 1]] = match[i];
@@ -289,14 +290,14 @@ module Carbon {
       return !!this.regexp.test(path);
     }
   }
-  
+
   function trigger(element: Element | Document, name: string, detail?) : boolean {
     return element.dispatchEvent(new CustomEvent(name, {
       bubbles: true,
       detail: detail
     }));
   }
-  
+
   class EventHandler {
     constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
       this.element.addEventListener(type, handler, useCapture);
