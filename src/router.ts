@@ -108,6 +108,7 @@ module Carbon {
       
       if (context) {
         cxt.prevpath = context.path;
+        cxt.prevstate = context.state;
       }
       
       if (this.beforeLoad) {
@@ -205,11 +206,13 @@ module Carbon {
     url: string;
     path: string;
     hash: string;
-    prevpath: string;
     nextpath: string;
     pathname: string;
     state: any;
 
+    prevpath: string;
+    prevstate: any;
+    
     title = null;
 
     params: any;
