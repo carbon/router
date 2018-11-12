@@ -28,8 +28,8 @@ module Carbon {
     }
 
     start(options) {
-      this.popObserver = new EventHandler(window, 'popstate', this._onpopstate.bind(this), false);
-      this.clickObserver =  new EventHandler(window, 'click', this._onclick.bind(this), true);
+      this.popObserver    = new EventHandler(window, 'popstate', this._onpopstate.bind(this), false);
+      this.clickObserver  = new EventHandler(document, 'click', this._onclick.bind(this), true);
 
       let cxt = new RouterContext(
         /*url*/ location.pathname + location.search,
@@ -108,7 +108,6 @@ module Carbon {
       
       if (context) {
         cxt.prevpath = context.path;
-        cxt.prevstate = context.state;
       }
       
       if (this.beforeLoad) {
@@ -211,7 +210,6 @@ module Carbon {
     state: any;
 
     prevpath: string;
-    prevstate: any;
     
     title = null;
 
@@ -302,7 +300,7 @@ module Carbon {
   }
 
   class EventHandler {
-    constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
+    constructor(public element: HTMLElement | Window | Document, public type, public handler, public useCapture = false) {
       this.element.addEventListener(type, handler, useCapture);
     }
 
