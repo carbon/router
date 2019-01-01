@@ -17,9 +17,7 @@ module Carbon {
 
     constructor(routes: Route[]) {
       if (routes && typeof routes == 'object') {
-        let keys = Object.keys(routes);
-
-        for (var key of keys) {
+        for (var key of Object.keys(routes)) {
           this.route(key, routes[key]);
         }
       }
@@ -27,9 +25,9 @@ module Carbon {
       Router.instance = this;
     }
 
-    start(options) {
-      this.popObserver    = new EventHandler(window, 'popstate', this._onpopstate.bind(this), false);
-      this.clickObserver  = new EventHandler(window, 'click', this._onclick.bind(this), true);
+    start() {
+      this.popObserver    = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
+      this.clickObserver  = new EventHandler(window, 'click', this.onClick.bind(this), true);
 
       let cxt = new RouterContext(
         /*url*/ location.pathname + location.search,
@@ -54,11 +52,11 @@ module Carbon {
       this.clickObserver.stop();
     }
 
-    route(path, handler: Function) {
+    route(path: string, handler: Function) {
       this.routes.push(new Route(path, handler));
     }
 
-    navigate(url, options) {
+    navigate(url, options: any) {
       let cxt = new RouterContext(url, null);
 
       if (options && options.replace) cxt.replace = true;
@@ -79,8 +77,8 @@ module Carbon {
         }
       }
 
-      if (this.context) {
-        if (this.context.url === cxt.url) return; // same
+      if (this.context && this.context.url === cxt.url) {
+        return; // same
       }
 
       if (cxt.replace) {
@@ -168,18 +166,20 @@ module Carbon {
       }
     }
 
-    _onpopstate(e) {
+    private onPopState(e) {
       if (!e.state || !e.state.url) return;
 
       this._dispatch(new RouterContext(e.state.url, e.state));
     }
 
-    _onclick(e: MouseEvent) {
+    private onClick(e: MouseEvent) {
       if (e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
 
       let el = <HTMLElement>e.target;
 
-      while (el && el.nodeName !== 'A') el = <HTMLElement>el.parentNode;
+      while (el && el.nodeName !== 'A') {
+        el = <HTMLElement>el.parentNode;
+      }
 
       if (!el || el.nodeName !== 'A') return;
 
@@ -207,13 +207,10 @@ module Carbon {
 
   export class RouterContext {
     url: string;
-    path: string;
     hash: string;
-    nextpath: string;
-    pathname: string;
-    state: any;
-
     prevpath: string;
+    nextpath: string;
+    state: any;
     
     title = null;
 
@@ -227,14 +224,22 @@ module Carbon {
     init = false;
     replace = false;
 
-    constructor(url: string, state) {
-      this.url = url;
-      this.path = url.split('?')[0];
-      this.pathname = this.path;
-
+    constructor(url: string, state: any) {
+      this.url = url;   
+     
       this.state = state || { };
 
+      console.log(this.url, this.path);
+
       this.state.url = url;
+    }
+
+    get path() {
+      let queryIndex = this.url.indexOf('?');
+
+      return (queryIndex > 0) 
+        ? this.url.substring(0, queryIndex)
+        : this.url;
     }
 
     save() {
@@ -296,7 +301,7 @@ module Carbon {
     }
   }
 
-  function trigger(element: Element | Document, name: string, detail?) : boolean {
+  function trigger(element: Element | Document, name: string, detail?: any) : boolean {
     return element.dispatchEvent(new CustomEvent(name, {
       bubbles: true,
       detail: detail
