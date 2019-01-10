@@ -35,7 +35,6 @@ module Carbon {
       );
 
       cxt.hash = location.hash;
-
       cxt.init = true;
 
       cxt.save();
@@ -56,7 +55,7 @@ module Carbon {
       this.routes.push(new Route(path, handler));
     }
 
-    navigate(url, options: any) {
+    navigate(url: string, options: any) {
       let cxt = new RouterContext(url, null);
 
       if (options && options.replace) cxt.replace = true;
@@ -229,8 +228,6 @@ module Carbon {
      
       this.state = state || { };
 
-      console.log(this.url, this.path);
-
       this.state.url = url;
     }
 
@@ -271,7 +268,7 @@ module Carbon {
 
       var re2 = url;
 
-      var item;
+      var item: RegExpExecArray;
 
       while (item = re.exec(url)) {
         this.paramNames.push(item[1]);
@@ -296,7 +293,7 @@ module Carbon {
       return params;
     }
 
-    test(path) {
+    test(path: string) {
       return !!this.regexp.test(path);
     }
   }
