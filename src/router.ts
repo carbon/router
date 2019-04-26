@@ -12,8 +12,8 @@ module Carbon {
 
     beforeLoad: Function;
     beforeNavigate: Function;
-
     executing = false;
+    onLinkClick: Function;
 
     constructor(routes: Route[]) {
       if (routes && typeof routes == 'object') {
@@ -186,7 +186,13 @@ module Carbon {
 
       if (!href) return;
 
-      if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) return;
+      if (this.onLinkClick && this.onLinkClick({ target: el }) === false) {
+        return;
+      }
+
+      if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) {
+        return;
+      }
 
       let cxt = new RouterContext(href, null);
 
