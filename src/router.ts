@@ -26,7 +26,7 @@ module Carbon {
     }
 
     start() {
-      this.popObserver    = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
+      this.popObserver = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
       this.clickObserver  = new EventHandler(window, 'click', this.onClick.bind(this), true);
 
       let cxt = new RouterContext(

@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "ES2018",
     "module": "commonjs",
     "removeComments": true,
     "watch": false,
@@ -8,6 +8,7 @@
     "outDir": "lib/"
   },
   "files": [
-    "src/router.ts"
+    "src/router.ts",
+    "src/reactive.d.ts"
   ]
 }
