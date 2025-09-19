@@ -1,14 +1,12 @@
 {
   "compilerOptions": {
-    "target": "ES2018",
-    "module": "commonjs",
+    "target": "esnext",
+    "module": "esnext",
     "removeComments": true,
-    "watch": false,
     "sourceMap": false,
     "outDir": "lib/"
   },
   "files": [
-    "src/router.ts",
-    "src/reactive.d.ts"
+    "src/router.ts"
   ]
 }

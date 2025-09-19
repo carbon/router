@@ -1,327 +1,317 @@
-module Carbon {
-  export class Router {
-    static instance: Router;
+export class Router {
+  static instance: Router;
 
-    routes: Route[] = [];
-    callbacks: RouteAction[] = [];
+  routes: Route[] = [];
+  callbacks: RouteAction[] = [];
+  context: RouterContext = null;
+  popObserver: EventHandler;
+  clickObserver: EventHandler;
+  beforeLoad: Function;
+  beforeNavigate: Function;
+  executing = false;
+  onLinkClick: Function;
 
-    context: RouterContext = null;
-
-    popObserver: EventHandler;
-    clickObserver: EventHandler;
-
-    beforeLoad: Function;
-    beforeNavigate: Function;
-    executing = false;
-    onLinkClick: Function;
-
-    constructor(routes: Route[]) {
-      if (routes && typeof routes == 'object') {
-        for (var key of Object.keys(routes)) {
-          this.route(key, routes[key]);
-        }
+  constructor(routes: Route[]) {
+    if (routes && typeof routes == 'object') {
+      for (var key of Object.keys(routes)) {
+        this.route(key, routes[key]);
       }
-
-      Router.instance = this;
     }
 
-    start() {
-      this.popObserver = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
-      this.clickObserver  = new EventHandler(window, 'click', this.onClick.bind(this), true);
+    Router.instance = this;
+  }
 
-      let cxt = new RouterContext(
-        /*url*/ location.pathname + location.search,
-        /*state*/ null
-      );
+  start() {
+    this.popObserver = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
+    this.clickObserver  = new EventHandler(window, 'click', this.onClick.bind(this), true);
 
-      cxt.hash = location.hash;
-      cxt.init = true;
+    let cxt = new RouterContext(
+      /*url*/ location.pathname + location.search,
+      /*state*/ null
+    );
 
+    cxt.hash = location.hash;
+    cxt.init = true;
+
+    cxt.save();
+
+    this.#dispatch(cxt); // Initial dispatch
+  }
+
+  on(type: string, listener: EventListener) {
+    document.addEventListener(type, listener, false);
+  }
+
+  stop() {
+    this.popObserver.stop();
+    this.clickObserver.stop();
+  }
+
+  route(path: string, handler: Function) {
+    this.routes.push(new Route(path, handler));
+  }
+
+  navigate(url: string, options: any) {
+    let cxt = new RouterContext(url, null);
+
+    if (options && options.replace) cxt.replace = true;
+
+    this.#navigate(cxt);
+  }
+
+  #navigate(cxt: RouterContext) {
+    let result = trigger(document, 'router:navigate', cxt);
+
+    if (result === false) return;
+
+    if (this.beforeNavigate) {
+      let result = this.beforeNavigate(cxt);
+
+      if (result === false) {
+        return;
+      }
+    }
+
+    if (this.context && this.context.url === cxt.url) {
+      return; // same
+    }
+
+    if (cxt.replace) {
       cxt.save();
-
-      this._dispatch(cxt); // Initial dispatch
+    }
+    else {
+      history.pushState(cxt.state, cxt.title, cxt.url);
     }
 
-    on(type: string, listener: EventListener) {
-      document.addEventListener(type, listener, false);
-    }
-
-    stop() {
-      this.popObserver.stop();
-      this.clickObserver.stop();
-    }
-
-    route(path: string, handler: Function) {
-      this.routes.push(new Route(path, handler));
-    }
-
-    navigate(url: string, options: any) {
-      let cxt = new RouterContext(url, null);
-
-      if (options && options.replace) cxt.replace = true;
-
-      this._navigate(cxt);
-    }
-
-    _navigate(cxt: RouterContext) {
-      let result = trigger(document, 'router:navigate', cxt);
-
-      if (result === false) return;
-
-      if (this.beforeNavigate) {
-        let result = this.beforeNavigate(cxt);
-
-        if (result === false) {
-          return;
-        }
-      }
-
-      if (this.context && this.context.url === cxt.url) {
-        return; // same
-      }
-
-      if (cxt.replace) {
-        cxt.save();
-      }
-      else {
-        history.pushState(cxt.state, cxt.title, cxt.url);
-      }
-
-      this._dispatch(cxt);
-    }
-
-    _dispatch(cxt: RouterContext) {
-      let context = this.context; // current context (being replaced)
-            
-      if (context && context.route.unload) {  
-        context.nextpath = cxt.path;
-
-        this._execute(new RouteAction('unload', context.route.unload, context));
-      }
-
-      if (!cxt.route) {
-        cxt.route = this._getRoute(cxt);
-      }
-
-      if (!cxt.route) return;
-
-      cxt.params = cxt.route.params(cxt.path);
-      
-      if (context) {
-        cxt.prevpath = context.path;
-      }
-      
-      if (this.beforeLoad) {
-        this.beforeLoad(cxt);
-      }
-
-      this._execute(new RouteAction('load', cxt.route.load, cxt));
-
-      this.context = cxt;
-    }
-
-    _getRoute(cxt: RouterContext) {
-      for (var route of this.routes) {
-        if (route.test(cxt.path)) return route;
-      }
-
-      return null;
-    }
-
-    _execute(action: RouteAction) {
-      this.callbacks.push(action);
-
-      // execute immediatly if we can
-      if (!this.executing) {
-        this._fireNext();
-      }
-    }
-
-    _fireNext() {
-      if (this.callbacks.length === 0) {
-        this.executing = false;
-
-        return;
-      }
-
-      this.executing = true;
-
-      // Pick the next action off the queue
-      let action = this.callbacks.shift();
-
-      let result = action.handler(action.context);
-
-      if (result && result.then) {
-        result.then(() => {
-          trigger(document, 'route:' + action.type, action.context);;
-
-          this._fireNext();
-        });
-      }
-      else {
-        this._fireNext();
-
-        trigger(document, 'route:' + action.type, action.context);
-      }
-    }
-
-    private onPopState(e) {
-      if (!e.state || !e.state.url) return;
-
-      this._dispatch(new RouterContext(e.state.url, e.state));
-    }
-
-    private onClick(e: MouseEvent) {
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
-
-      let el = <HTMLElement>e.target;
-
-      while (el && el.nodeName !== 'A') {
-        el = <HTMLElement>el.parentNode;
-      }
-
-      if (!el || el.nodeName !== 'A') return;
-
-      let href = el.getAttribute('href');
-
-      if (!href) return;
-
-      if (this.onLinkClick && this.onLinkClick({ target: el }) === false) {
-        return;
-      }
-
-      if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) {
-        return;
-      }
-
-      let cxt = new RouterContext(href, null);
-
-      // Ensure it matches a route
-      cxt.route = this._getRoute(cxt);
-
-      if (!cxt.route) return;
-
-      cxt.clickEvent = e;
-      cxt.target = el;
-
-      e.preventDefault();
-
-      this._navigate(cxt);
-    }
+    this.#dispatch(cxt);
   }
 
-  export class RouterContext {
-    url: string;
-    hash: string;
-    prevpath: string;
-    nextpath: string;
-    state: any;
+  #dispatch(cxt: RouterContext) {
+    let context = this.context; // current context (being replaced)
+          
+    if (context && context.route.unload) {  
+      context.nextpath = cxt.path;
+
+      this.#execute(new RouteAction('unload', context.route.unload, context));
+    }
+
+    if (!cxt.route) {
+      cxt.route = this.#getRoute(cxt);
+    }
+
+    if (!cxt.route) return;
+
+    cxt.params = cxt.route.params(cxt.path);
     
-    title = null;
-
-    params: any;
-
-    route: Route;
-
-    clickEvent: MouseEvent;
-    target: HTMLElement;
-
-    init = false;
-    replace = false;
-
-    constructor(url: string, state: any) {
-      this.url = url;   
-     
-      this.state = state || { };
-
-      this.state.url = url;
+    if (context) {
+      cxt.prevpath = context.path;
+    }
+    
+    if (this.beforeLoad) {
+      this.beforeLoad(cxt);
     }
 
-    get path() {
-      let queryIndex = this.url.indexOf('?');
+    this.#execute(new RouteAction('load', cxt.route.load, cxt));
 
-      return (queryIndex > 0) 
-        ? this.url.substring(0, queryIndex)
-        : this.url;
+    this.context = cxt;
+  }
+
+  #getRoute(cxt: RouterContext) {
+    for (var route of this.routes) {
+      if (route.test(cxt.path)) return route;
     }
 
-    save() {
-      history.replaceState(this.state, this.title, this.url + this.hash);
+    return null;
+  }
+
+  #execute(action: RouteAction) {
+    this.callbacks.push(action);
+
+    // execute immediatly if we can
+    if (!this.executing) {
+      this.#fireNext();
     }
   }
 
-  export class Route {
-    url: string;
-    paramNames: string[] = [ ];
+  #fireNext() {
+    if (this.callbacks.length === 0) {
+      this.executing = false;
 
-    regexp: RegExp;
-
-    load: Function;
-    unload: Function;
-
-    constructor(url: string, fn: Function | { load: Function, unload: Function }) {
-      this.url = url;
-
-      if (typeof fn === 'function') {
-        this.load = <Function>fn;
-      }
-      else {
-        this.load = fn.load.bind(fn);
-        this.unload = fn.unload.bind(fn);
-      }
-
-      const re = /{([^}]+)}/g;
-
-      var re2 = url;
-
-      var item: RegExpExecArray;
-
-      while (item = re.exec(url)) {
-        this.paramNames.push(item[1]);
-
-        re2 = re2.replace(item[0], '\s*(.*)\s*');
-      }
-
-      this.regexp = new RegExp(re2 + '$', 'i');
+      return;
     }
 
-    params(path: string) {
-      let match = this.regexp.exec(path);
+    this.executing = true;
 
-      if (!match) return null;
+    // Pick the next action off the queue
+    let action = this.callbacks.shift();
 
-      let params = { };
+    let result = action.handler(action.context);
 
-      for (var i = 1; i < match.length; i++) {
-        params[this.paramNames[i - 1]] = match[i];
-      }
+    if (result && result.then) {
+      result.then(() => {
+        trigger(document, 'route:' + action.type, action.context);;
 
-      return params;
+        this.#fireNext();
+      });
     }
+    else {
+      this.#fireNext();
 
-    test(path: string) {
-      return !!this.regexp.test(path);
+      trigger(document, 'route:' + action.type, action.context);
     }
   }
 
-  function trigger(element: Element | Document, name: string, detail?: any) : boolean {
-    return element.dispatchEvent(new CustomEvent(name, {
-      bubbles: true,
-      detail: detail
-    }));
+  private onPopState(e: PopStateEvent) {
+    if (!e.state || !e.state.url) return;
+
+    this.#dispatch(new RouterContext(e.state.url, e.state));
   }
 
-  class EventHandler {
-    constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
-      this.element.addEventListener(type, handler, useCapture);
+  private onClick(e: MouseEvent) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
+
+    let el = <HTMLElement>e.target;
+
+    while (el && el.nodeName !== 'A') {
+      el = <HTMLElement>el.parentNode;
     }
 
-    stop() {
-      this.element.removeEventListener(this.type, this.handler, this.useCapture);
+    if (!el || el.nodeName !== 'A') return;
+
+    let href = el.getAttribute('href');
+
+    if (!href) return;
+
+    if (this.onLinkClick && this.onLinkClick({ target: el }) === false) {
+      return;
     }
+
+    if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) {
+      return;
+    }
+
+    let cxt = new RouterContext(href, null);
+
+    // Ensure it matches a route
+    cxt.route = this.#getRoute(cxt);
+
+    if (!cxt.route) return;
+
+    cxt.clickEvent = e;
+    cxt.target = el;
+
+    e.preventDefault();
+
+    this.#navigate(cxt);
+  }
+}
+
+export class RouterContext {
+  url: string;
+  hash: string;
+  prevpath: string;
+  nextpath: string;
+  state: any;
+  title = null;
+  params: any;
+  route: Route;
+  clickEvent: MouseEvent;
+  target: HTMLElement;
+  init = false;
+  replace = false;
+
+  constructor(url: string, state: any) {
+    this.url = url;   
+    
+    this.state = state || { };
+
+    this.state.url = url;
   }
 
-  class RouteAction {
-    constructor(public type: string, public handler: Function, public context: RouterContext) { }
+  get path() {
+    let queryIndex = this.url.indexOf('?');
+
+    return (queryIndex > 0) 
+      ? this.url.substring(0, queryIndex)
+      : this.url;
   }
+
+  save() {
+    history.replaceState(this.state, this.title, this.url + this.hash);
+  }
+}
+
+export class Route {
+  url: string;
+  paramNames: string[] = [ ];
+
+  regexp: RegExp;
+
+  load: Function;
+  unload: Function;
+
+  constructor(url: string, fn: Function | { load: Function, unload: Function }) {
+    this.url = url;
+
+    if (typeof fn === 'function') {
+      this.load = <Function>fn;
+    }
+    else {
+      this.load = fn.load.bind(fn);
+      this.unload = fn.unload.bind(fn);
+    }
+
+    const re = /{([^}]+)}/g;
+
+    var re2 = url;
+
+    var item: RegExpExecArray;
+
+    while (item = re.exec(url)) {
+      this.paramNames.push(item[1]);
+
+      re2 = re2.replace(item[0], '\s*(.*)\s*');
+    }
+
+    this.regexp = new RegExp(re2 + '$', 'i');
+  }
+
+  params(path: string) {
+    let match = this.regexp.exec(path);
+
+    if (!match) return null;
+
+    let params = { };
+
+    for (var i = 1; i < match.length; i++) {
+      params[this.paramNames[i - 1]] = match[i];
+    }
+
+    return params;
+  }
+
+  test(path: string) {
+    return !!this.regexp.test(path);
+  }
+}
+
+function trigger(element: Element | Document, name: string, detail?: any) : boolean {
+  return element.dispatchEvent(new CustomEvent(name, {
+    bubbles: true,
+    detail: detail
+  }));
+}
+
+class EventHandler {
+  constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
+    this.element.addEventListener(type, handler, useCapture);
+  }
+
+  stop() {
+    this.element.removeEventListener(this.type, this.handler, this.useCapture);
+  }
+}
+
+export class RouteAction {
+  constructor(public type: string, public handler: Function, public context: RouterContext) { }
 }
