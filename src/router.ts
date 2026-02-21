@@ -1,19 +1,34 @@
+export type RouteHandler = (context: RouterContext) => void | Promise<void>;
+export type BeforeHook = (context: RouterContext) => boolean | void;
+export type LinkClickHandler = (event: { target: HTMLElement }) => boolean | void;
+export type RouteConfig = RouteHandler | { load: RouteHandler; unload: RouteHandler };
+export type RouteActionType = 'load' | 'unload';
+
+export interface NavigateOptions {
+  replace?: boolean;
+}
+
+export interface RouteState {
+  url: string;
+  [key: string]: unknown;
+}
+
 export class Router {
   static instance: Router;
 
   routes: Route[] = [];
   callbacks: RouteAction[] = [];
-  context: RouterContext = null;
-  popObserver: EventHandler;
-  clickObserver: EventHandler;
-  beforeLoad: Function;
-  beforeNavigate: Function;
+  context: RouterContext | null = null;
+  popObserver!: EventHandler;
+  clickObserver!: EventHandler;
+  beforeLoad?: BeforeHook;
+  beforeNavigate?: BeforeHook;
   executing = false;
-  onLinkClick: Function;
+  onLinkClick?: LinkClickHandler;
 
-  constructor(routes: Route[]) {
-    if (routes && typeof routes == 'object') {
-      for (var key of Object.keys(routes)) {
+  constructor(routes: Record<string, RouteConfig>) {
+    if (routes && typeof routes === 'object') {
+      for (const key of Object.keys(routes)) {
         this.route(key, routes[key]);
       }
     }
@@ -22,12 +37,12 @@ export class Router {
   }
 
   start() {
-    this.popObserver = new EventHandler(window, 'popstate', this.onPopState.bind(this), false);
-    this.clickObserver  = new EventHandler(window, 'click', this.onClick.bind(this), true);
+    this.popObserver = new EventHandler(window, 'popstate', this.#onPopState.bind(this), false);
+    this.clickObserver = new EventHandler(window, 'click', this.#onClick.bind(this) as EventListener, true);
 
-    let cxt = new RouterContext(
-      /*url*/ location.pathname + location.search,
-      /*state*/ null
+    const cxt = new RouterContext(
+      location.pathname + location.search,
+      null
     );
 
     cxt.hash = location.hash;
@@ -35,7 +50,7 @@ export class Router {
 
     cxt.save();
 
-    this.#dispatch(cxt); // Initial dispatch
+    this.#dispatch(cxt);
   }
 
   on(type: string, listener: EventListener) {
@@ -47,14 +62,14 @@ export class Router {
     this.clickObserver.stop();
   }
 
-  route(path: string, handler: Function) {
+  route(path: string, handler: RouteConfig) {
     this.routes.push(new Route(path, handler));
   }
 
-  navigate(url: string, options: any) {
-    let cxt = new RouterContext(url, null);
+  navigate(url: string, options?: NavigateOptions) {
+    const cxt = new RouterContext(url, null);
 
-    if (options && options.replace) cxt.replace = true;
+    if (options?.replace) cxt.replace = true;
 
     this.#navigate(cxt);
   }
@@ -65,31 +80,31 @@ export class Router {
     if (result === false) return;
 
     if (this.beforeNavigate) {
-      let result = this.beforeNavigate(cxt);
+      const hookResult = this.beforeNavigate(cxt);
 
-      if (result === false) {
+      if (hookResult === false) {
         return;
       }
     }
 
     if (this.context && this.context.url === cxt.url) {
-      return; // same
+      return;
     }
 
     if (cxt.replace) {
       cxt.save();
     }
     else {
-      history.pushState(cxt.state, cxt.title, cxt.url);
+      history.pushState(cxt.state, cxt.title ?? '', cxt.url);
     }
 
     this.#dispatch(cxt);
   }
 
   #dispatch(cxt: RouterContext) {
-    let context = this.context; // current context (being replaced)
-          
-    if (context && context.route.unload) {  
+    const context = this.context;
+
+    if (context?.route?.unload) {
       context.nextpath = cxt.path;
 
       this.#execute(new RouteAction('unload', context.route.unload, context));
@@ -102,11 +117,11 @@ export class Router {
     if (!cxt.route) return;
 
     cxt.params = cxt.route.params(cxt.path);
-    
+
     if (context) {
       cxt.prevpath = context.path;
     }
-    
+
     if (this.beforeLoad) {
       this.beforeLoad(cxt);
     }
@@ -116,18 +131,13 @@ export class Router {
     this.context = cxt;
   }
 
-  #getRoute(cxt: RouterContext) {
-    for (var route of this.routes) {
-      if (route.test(cxt.path)) return route;
-    }
-
-    return null;
+  #getRoute(cxt: RouterContext): Route | null {
+    return this.routes.find(route => route.test(cxt.path)) ?? null;
   }
 
   #execute(action: RouteAction) {
     this.callbacks.push(action);
 
-    // execute immediatly if we can
     if (!this.executing) {
       this.#fireNext();
     }
@@ -142,14 +152,13 @@ export class Router {
 
     this.executing = true;
 
-    // Pick the next action off the queue
-    let action = this.callbacks.shift();
+    const action = this.callbacks.shift()!;
 
-    let result = action.handler(action.context);
+    const result = action.handler(action.context);
 
     if (result && result.then) {
       result.then(() => {
-        trigger(document, 'route:' + action.type, action.context);;
+        trigger(document, 'route:' + action.type, action.context);
 
         this.#fireNext();
       });
@@ -161,24 +170,24 @@ export class Router {
     }
   }
 
-  private onPopState(e: PopStateEvent) {
+  #onPopState(e: PopStateEvent) {
     if (!e.state || !e.state.url) return;
 
     this.#dispatch(new RouterContext(e.state.url, e.state));
   }
 
-  private onClick(e: MouseEvent) {
+  #onClick(e: MouseEvent) {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.defaultPrevented) return;
 
-    let el = <HTMLElement>e.target;
+    let el = e.target as HTMLElement;
 
     while (el && el.nodeName !== 'A') {
-      el = <HTMLElement>el.parentNode;
+      el = el.parentNode as HTMLElement;
     }
 
     if (!el || el.nodeName !== 'A') return;
 
-    let href = el.getAttribute('href');
+    const href = el.getAttribute('href');
 
     if (!href) return;
 
@@ -186,13 +195,12 @@ export class Router {
       return;
     }
 
-    if (href.indexOf('://') > -1 || href.indexOf('mailto:') > -1) {
+    if (href.includes('://') || href.includes('mailto:')) {
       return;
     }
 
-    let cxt = new RouterContext(href, null);
+    const cxt = new RouterContext(href, null);
 
-    // Ensure it matches a route
     cxt.route = this.#getRoute(cxt);
 
     if (!cxt.route) return;
@@ -208,53 +216,53 @@ export class Router {
 
 export class RouterContext {
   url: string;
-  hash: string;
-  prevpath: string;
-  nextpath: string;
-  state: any;
-  title = null;
-  params: any;
-  route: Route;
-  clickEvent: MouseEvent;
-  target: HTMLElement;
+  hash = '';
+  prevpath = '';
+  nextpath = '';
+  state: RouteState;
+  title: string | null = null;
+  params: Record<string, string> | null = null;
+  route: Route | null = null;
+  clickEvent!: MouseEvent;
+  target!: HTMLElement;
   init = false;
   replace = false;
 
-  constructor(url: string, state: any) {
-    this.url = url;   
-    
-    this.state = state || { };
+  constructor(url: string, state: RouteState | null) {
+    this.url = url;
+
+    this.state = state ?? { url };
 
     this.state.url = url;
   }
 
-  get path() {
-    let queryIndex = this.url.indexOf('?');
+  get path(): string {
+    const queryIndex = this.url.indexOf('?');
 
-    return (queryIndex > 0) 
+    return (queryIndex > 0)
       ? this.url.substring(0, queryIndex)
       : this.url;
   }
 
   save() {
-    history.replaceState(this.state, this.title, this.url + this.hash);
+    history.replaceState(this.state, this.title ?? '', this.url + this.hash);
   }
 }
 
 export class Route {
   url: string;
-  paramNames: string[] = [ ];
+  paramNames: string[] = [];
 
   regexp: RegExp;
 
-  load: Function;
-  unload: Function;
+  load: RouteHandler;
+  unload?: RouteHandler;
 
-  constructor(url: string, fn: Function | { load: Function, unload: Function }) {
+  constructor(url: string, fn: RouteConfig) {
     this.url = url;
 
     if (typeof fn === 'function') {
-      this.load = <Function>fn;
+      this.load = fn;
     }
     else {
       this.load = fn.load.bind(fn);
@@ -263,39 +271,38 @@ export class Route {
 
     const re = /{([^}]+)}/g;
 
-    var re2 = url;
+    let re2 = url;
+    let item: RegExpExecArray | null;
 
-    var item: RegExpExecArray;
-
-    while (item = re.exec(url)) {
+    while ((item = re.exec(url))) {
       this.paramNames.push(item[1]);
 
-      re2 = re2.replace(item[0], '\s*(.*)\s*');
+      re2 = re2.replace(item[0], '\\s*(.*)\\s*');
     }
 
     this.regexp = new RegExp(re2 + '$', 'i');
   }
 
-  params(path: string) {
-    let match = this.regexp.exec(path);
+  params(path: string): Record<string, string> | null {
+    const match = this.regexp.exec(path);
 
     if (!match) return null;
 
-    let params = { };
+    const params: Record<string, string> = {};
 
-    for (var i = 1; i < match.length; i++) {
+    for (let i = 1; i < match.length; i++) {
       params[this.paramNames[i - 1]] = match[i];
     }
 
     return params;
   }
 
-  test(path: string) {
-    return !!this.regexp.test(path);
+  test(path: string): boolean {
+    return this.regexp.test(path);
   }
 }
 
-function trigger(element: Element | Document, name: string, detail?: any) : boolean {
+function trigger(element: Element | Document, name: string, detail?: unknown): boolean {
   return element.dispatchEvent(new CustomEvent(name, {
     bubbles: true,
     detail: detail
@@ -303,7 +310,12 @@ function trigger(element: Element | Document, name: string, detail?: any) : bool
 }
 
 class EventHandler {
-  constructor(public element: HTMLElement | Window, public type, public handler, public useCapture = false) {
+  constructor(
+    public element: HTMLElement | Window,
+    public type: string,
+    public handler: EventListener,
+    public useCapture = false
+  ) {
     this.element.addEventListener(type, handler, useCapture);
   }
 
@@ -313,5 +325,9 @@ class EventHandler {
 }
 
 export class RouteAction {
-  constructor(public type: string, public handler: Function, public context: RouterContext) { }
+  constructor(
+    public type: RouteActionType,
+    public handler: RouteHandler,
+    public context: RouterContext
+  ) { }
 }
